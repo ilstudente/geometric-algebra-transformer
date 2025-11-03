@@ -217,6 +217,9 @@ def test_geometric_attention_proximity():
 
 
 @pytest.mark.parametrize("block_attention", [True, False])
+@pytest.mark.skipif(
+    not torch.cuda.is_available(), reason="CUDA is required for geometric cross-attention tests"
+)
 def test_geometric_cross_attention(block_attention):
     """Test cross attention shapes."""
     num_q = 100
