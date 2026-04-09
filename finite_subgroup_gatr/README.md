@@ -26,9 +26,12 @@ A research platform for comparing **exact** vs. **approximate** finite-group equ
    - 5.4 GeoMLP
    - 5.5 Discrete MV attention
    - 5.6 Equivariance metrics
-6. [Running Experiments](#6-running-experiments)
-7. [API Reference](#7-api-reference)
-8. [Test Suite](#8-test-suite)
+6. [Known Limitations and Open Issues](#6-known-limitations-and-open-issues)
+   - 6.1 No inter-particle communication (n-body wrapper)
+   - 6.2 Equivariant unlifting required for position prediction
+7. [Running Experiments](#7-running-experiments)
+8. [API Reference](#8-api-reference)
+9. [Test Suite](#9-test-suite)
 
 ---
 
@@ -178,7 +181,9 @@ DiscreteMVAttention  →  residual
 GeoMLP  →  residual
 ```
 
-Adds global mixing across the token dimension on top of local group convolution.
+Adds global mixing across the **group** token dimension on top of local group convolution.
+Note: this attention still operates over the X = |G| group tokens of a **single** input entity.
+It does not mix across different physical objects (see §5.3 and §6 for implications).
 
 ### 3.4 Variant C — axial split
 
@@ -307,7 +312,22 @@ For each rotation matrix R ∈ SO(3), the 16×16 action matrix A_R is computed a
 
 This is implemented in `backends/rotation_backend.py:_compute_mv_action_matrix`.
 
-### 5.3 GM token mixer
+### 5.3 GM token mixer and the per-entity processing limitation
+
+**Important:** in the n-body experiment wrapper (`experiments/nbody_experiment.py`), N_obj particles are folded into the batch dimension before the network runs:
+
+```python
+x_flat = x_lifted.reshape(B * N_obj, X, C_mv, 16)   # particles → batch
+x_out  = self.net(x_flat, None)                       # each particle processed independently
+```
+
+This means **all variants (A, B, C) process each particle in isolation**. The GMTokenMixer and DiscreteMVAttention only mix over the X = |G| group tokens belonging to a single particle. There is no inter-particle communication: particle i never sees particle j's features at any layer.
+
+As a result the model functions as a per-particle symmetry-aware MLP, not a true interaction model. It can learn rotationally-structured per-particle dynamics (e.g. mapping initial position/velocity → future position under the group's inductive bias) but cannot model gravitational or other pairwise interactions.
+
+For a true n-body interaction model, the N_obj axis must remain in the token sequence alongside the group axis, with some form of cross-particle mixing (e.g. attention over the joint `[N_obj × X]` token set, or a separate inter-particle attention pass as in Variant C's object axis block).
+
+---
 
 `GMTokenMixer` in `gm/token_mixer.py`:
 
@@ -376,7 +396,32 @@ Both are computed during training and logged to MLflow / WandB.
 
 ---
 
-## 6. Running Experiments
+## 6. Known Limitations and Open Issues
+
+### 6.1 No inter-particle communication (n-body wrapper)
+
+As described in §5.3, the current `NBodyFiniteSubgroupWrapper` folds particles into the batch dimension. All mixing happens within a single particle's |G| group tokens. To properly model n-body dynamics the wrapper needs to be redesigned so that particles and group elements are both present in the token sequence simultaneously.
+
+Variant C (`variant_c_axial.py`) has the right skeleton for this: it cycles between a group-axis GM block and an object-axis attention block. The n-body wrapper should adopt this pattern rather than flattening N_obj into the batch.
+
+### 6.2 Equivariant unlifting required for position prediction
+
+The output of the network after group-pooling must use **equivariant unlifting**, not a plain mean:
+
+```python
+# Wrong — algebraically zero for full rotation groups:
+x_pooled = x_out.mean(dim=1)
+
+# Correct — apply g⁻¹ before averaging:
+inv_mats = action_matrices.transpose(-1, -2)
+x_pooled = torch.einsum("gij, bgcj -> bgci", inv_mats, x_out).mean(dim=1)
+```
+
+Plain group-pooling produces an invariant output. For full 3D rotation groups (octahedral, tetrahedral, icosahedral) this is algebraically zero for any 3D position, since the group acts irreducibly on R³ with no fixed directions. This fix is already applied in the current `NBodyFiniteSubgroupWrapper`.
+
+---
+
+## 7. Running Experiments
 
 ### Setup
 
@@ -507,7 +552,7 @@ mlflow ui --backend-store-uri sqlite:///path/to/base/tracking/mlflow.db
 
 ---
 
-## 7. API Reference
+## 8. API Reference
 
 ### Backends
 
@@ -610,7 +655,7 @@ loss, metrics = criterion(task_loss, model, x_mv)
 
 ---
 
-## 8. Test Suite
+## 9. Test Suite
 
 61 tests across 5 files, run with:
 
