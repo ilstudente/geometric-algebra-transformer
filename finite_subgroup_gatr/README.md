@@ -312,6 +312,31 @@ For each rotation matrix R ∈ SO(3), the 16×16 action matrix A_R is computed a
 
 This is implemented in `backends/rotation_backend.py:_compute_mv_action_matrix`.
 
+**Role in the forward pass**
+
+The 16×16 action matrices appear at exactly two points — the input and output boundaries of the network — and **nowhere else**:
+
+| Stage | Where | Operation |
+|-------|-------|-----------|
+| **Lifting** (input) | `nbody_experiment.py` | `einsum("gij, bnj -> bngi", action_matrices, x_pga)` — applies all |G| rotations to the input, creating one token per group element |
+| **Unlifting** (output) | `nbody_experiment.py` | `einsum("gij, bgcj -> bgci", inv_mats, x_out).mean(dim=1)` — applies inverse rotation to each output token before collapsing |
+| **Inside the network** | — | **Not used.** No matrix multiplication on the 16-component axis at any layer. |
+
+Inside the network the group structure enters only as **index permutations** derived from the multiplication table:
+
+```python
+# shifts.py — right shift by g_k: perm[x] = x * g_k = mul_table[x, g_k]
+perms[k] = backend.mul_table[:, g_k]   # [X] integer indices
+
+# token_mixer.py — gather tokens, then mix channels with a learned weight
+x_shifted = x_mv[:, perm, :, :]               # reorder tokens — no 16×16 matrix
+out_mv += einsum("oi, bxid -> bxod", W_k, x_shifted)  # W_k: [C_out, C_in], channels only
+```
+
+The learned weights `W_k` operate only on the channel dimension `C`; the 16 PGA components are carried passively through the token sequence. The geometric content of a multivector is never modified by the GM convolution itself — only the channel mixing and token ordering change.
+
+**Summary:** the structured group matrices encode the group action once (at lifting) and once in reverse (at unlifting). Everything in between is combinatorial: the multiplication table tells the mixer which token to read from, and the equivariant linear map assembles an output from those reordered tokens, grade by grade.
+
 ### 5.3 GM token mixer and the per-entity processing limitation
 
 **Important:** in the n-body experiment wrapper (`experiments/nbody_experiment.py`), N_obj particles are folded into the batch dimension before the network runs:
