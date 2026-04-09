@@ -1,0 +1,3 @@
+[submodule "GMCNN"]
+	path = GMCNN
+	url = https://github.com/Weber-GeoML/GM-CNN.git

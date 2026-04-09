@@ -1,0 +1,26 @@
+# FiniteSubgroupGATr Variant B wrapper for n-body (GM + attention)
+
+_target_: finite_subgroup_gatr.experiments.nbody_experiment.NBodyFiniteSubgroupWrapper
+
+backend:
+  _target_: finite_subgroup_gatr.backends.rotation_backend.OctahedralBackend
+
+net:
+  _target_: finite_subgroup_gatr.models.variant_b_gm_attention.VariantB
+
+  backend:
+    _target_: finite_subgroup_gatr.backends.rotation_backend.OctahedralBackend
+
+  in_mv_channels: 1
+  out_mv_channels: 1
+  c_mv: 16
+  c_s: null
+
+  num_blocks: 4
+  num_heads: 4
+  neighborhood_radius: 1
+  error_mode: "none"
+  error_rank: 4
+
+in_mv_channels: 1
+out_mv_channels: 1

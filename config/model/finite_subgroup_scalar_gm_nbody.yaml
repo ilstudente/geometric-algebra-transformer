@@ -1,0 +1,48 @@
+# Variant 3: scalar-path-only GM replacement for n-body
+#
+# Identical backbone to VariantA (GM-only token mixer), but with:
+#   - scalar path enabled (c_s=32)
+#   - scalar MLP inside GeoMLP replaced by ScalarFFNBundle
+#
+# scalar_mlp_mode:
+#   "dense"     – standard linear scalar MLP (Experiment 1 baseline)
+#   "gm_exact"  – ScalarGMLinear exact equivariance (Experiment 2)
+#   "gm_approx" – ScalarGMLinear + residual (Experiment 3)
+#
+# Override at the command line, e.g.:
+#   model.net.scalar_mlp_mode=gm_exact
+#   model.net.scalar_mlp_error_mode=low_rank
+#   model.net.scalar_mlp_error_rank=4
+
+_target_: finite_subgroup_gatr.experiments.nbody_experiment.NBodyFiniteSubgroupWrapper
+
+# Symmetry group backend (default: Octahedral)
+backend:
+  _target_: finite_subgroup_gatr.backends.rotation_backend.OctahedralBackend
+
+net:
+  _target_: finite_subgroup_gatr.models.variant_a_gm_only.VariantA
+
+  backend:
+    _target_: finite_subgroup_gatr.backends.rotation_backend.OctahedralBackend
+
+  in_mv_channels: 1
+  out_mv_channels: 1
+  c_mv: 16
+  in_s_channels: null      # no external scalar input; scalars are latent
+  out_s_channels: null
+  c_s: 32                  # scalar path enabled (null → 32)
+
+  num_blocks: 4
+  neighborhood_radius: 1
+  error_mode: "none"
+  error_rank: 4
+
+  # Scalar-path GM configuration
+  scalar_mlp_mode: "dense"         # override to gm_exact or gm_approx
+  scalar_mlp_radius: 1
+  scalar_mlp_error_mode: "none"    # used when scalar_mlp_mode=gm_approx
+  scalar_mlp_error_rank: 4
+
+in_mv_channels: 1
+out_mv_channels: 1

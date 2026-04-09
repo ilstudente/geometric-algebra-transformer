@@ -7,3 +7,23 @@
 *__pycache__*
 *.egg-info
 *.py[cod]
+
+# Large data / experiment outputs
+data/
+experiments/
+tracking/
+
+# Virtual environments
+GMCNN/.venv/
+GMCNN/logs/
+GMCNN/outputs/
+
+# Env / merge scratch files
+gatr_env.yml
+merge_envs.sh
+merged_env.yml
+new_gmcnn.yml
+raphael_env_example/
+
+# MLflow / wandb artefacts
+mlruns/

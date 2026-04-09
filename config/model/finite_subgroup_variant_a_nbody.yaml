@@ -1,0 +1,43 @@
+# FiniteSubgroupGATr Variant A wrapper for n-body
+# Instantiated via Hydra as NBodyFiniteSubgroupWrapper
+#
+# Architecture:
+#   raw input [B, N_obj, 7]
+#     ↓  PGA embed + group lift
+#   [B·N_obj, X, 1, 16]
+#     ↓  VariantA (GM-only, equivariant over X = group size)
+#   [B·N_obj, X, 1, 16]
+#     ↓  group-pool (mean over X)
+#   [B·N_obj, 1, 16]
+#     ↓  extract trivector → 3-D position
+#   [B, N_obj, 3]
+
+_target_: finite_subgroup_gatr.experiments.nbody_experiment.NBodyFiniteSubgroupWrapper
+
+# Symmetry group backend
+backend:
+  _target_: finite_subgroup_gatr.backends.rotation_backend.OctahedralBackend
+
+# The inner FiniteSubgroupGATr model (VariantA)
+net:
+  _target_: finite_subgroup_gatr.models.variant_a_gm_only.VariantA
+
+  # backend is passed in from the wrapper — but Hydra needs it here too for
+  # standalone construction.  You may override with a different backend.
+  backend:
+    _target_: finite_subgroup_gatr.backends.rotation_backend.OctahedralBackend
+
+  in_mv_channels: 1
+  out_mv_channels: 1
+  c_mv: 16
+  in_s_channels: null
+  out_s_channels: null
+  c_s: null
+
+  num_blocks: 4
+  neighborhood_radius: 1
+  error_mode: "none"      # exact equivariance
+  error_rank: 4
+
+in_mv_channels: 1
+out_mv_channels: 1
